@@ -352,12 +352,14 @@ def login():
 
 
 def user_supervisor():
+    log('User Supervisor: Process %s has launched' % os.getpid())
+    global _user_list
     while True:
-        global _user_list
         if _user_list.empty():
             with open('user.list', 'r') as fp:
                 for line in fp.readlines():
                     _user_list.put(line.strip())
+
 
 
 def check_login(content):
@@ -366,7 +368,7 @@ def check_login(content):
 
 def crawl_ship():
     global ship_id_count
-    log('Starting process: %s' % os.getpid())
+    log('Ship info crawler: Starting process: %s' % os.getpid())
     last_id = ''
     while not ship_id_list.empty():
         if not last_id:
@@ -490,7 +492,7 @@ def query_ship(id):
 
 def crawl_id():
     global current_page, current_ton_range, ship_id_count
-    log('Starting process: %s' % os.getpid())
+    log('ID Crawler: Starting process: %s' % os.getpid())
     start_ton = current_ton_range
 
     for val in range(start_ton, 403345, 5):
