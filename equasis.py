@@ -8,7 +8,7 @@ from logger import log, log_id
 from HTMLParser import HTMLParser
 from model import initSQLDb, Ship, close_db
 from parsers import MyInfoParser
-from multiprocessing import Queue, Process
+from multiprocessing import Queue, Process, Lock
 
 '''
     1.Login and capture SESSIONID
@@ -55,6 +55,9 @@ _RE_SHIPID = re.compile(r'P_IMO.value=\'(\d+)\'')
 # Record page crawling info
 current_ton_range = 99
 current_page = 1
+
+# Lock that controls database insertion
+db_lock = Lock()
 
 
 class MyIDParser(HTMLParser):
@@ -134,19 +137,18 @@ def check_login(content):
 def crawl_ship():
     global ship_id_count
     log('Ship info crawler: Starting process: %s' % os.getpid())
-    last_id = ''
+    is_ok = True
     while not ship_id_list.empty():
-        if not last_id:
-            _id = ship_id_list.get()
+        _id = ship_id_list.get()
+        if is_ok:
             ship_id_count -= 1
-        else:
-            _id = last_id
         try:
             query_ship(_id)
-            last_id = ''
+            is_ok = True
         except Exception, e:
-            log('HTTP EXCEPTION: %s When querying #%s' % (e.message, _id))
-            last_id = _id
+            log('HTTP EXCEPTION: %s When querying #%s - Put back to queue.' % (e.message, _id))
+            ship_id_list.put(_id)
+            is_ok = False
 
     log('Process %s done.' % os.getpid())
 
@@ -418,7 +420,13 @@ def query_ship(_id):
             log('Empty data line encountered. Put back ID #%s' % id)
             ship_id_list.put(id)
         else:
-            ship.Commit()
+            # Commit database transcation
+            # In other not to trigger DB_Blocked exception
+            db_lock.acquire()
+            try:
+                ship.Commit()
+            finally:
+                db_lock.release()
 
         ship.dispose()
         parser.close()
