@@ -4,11 +4,11 @@ __author__ = 'Excelle'
 import re, os
 import urllib2
 import time
-import string
-import sqlite3
-from multiprocessing import Pool, Queue, Process
-from threading import Thread, current_thread
+from logger import log, log_id
 from HTMLParser import HTMLParser
+from model import initSQLDb, Ship, close_db
+from parsers import MyInfoParser
+from multiprocessing import Queue, Process
 
 '''
     1.Login and capture SESSIONID
@@ -17,11 +17,9 @@ from HTMLParser import HTMLParser
     4.Parse SHIPID and PageID
 '''
 
-debug_mode = True
-_LOGFILE = './crawler_equasis.log'
-
 _user_name = ''
 _user_list = Queue()
+company_list = []
 expire_count = 0
 _user_pwd = '1234567'
 base_url = 'http://www.equasis.org'
@@ -31,107 +29,31 @@ _login_url = 'http://www.equasis.org/EquasisWeb/authen/HomePage?fs=HomePage'
 cookie_header = ''
 # POST
 _ship_query_url = 'http://www.equasis.org/EquasisWeb/restricted/ShipInfo?fs=ShipList'
+_ship_imo_conv_url = 'http://www.equasis.org/EquasisWeb/restricted/ShipCertification?fs=ShipInfo'
+_ship_psc_url = 'http://www.equasis.org/EquasisWeb/restricted/ShipInspection?fs=ShipCertification'
+_ship_inspect_url = 'http://www.equasis.org/EquasisWeb/restricted/DetailsPSC?fs=ShipInspection'
+_ship_history_url = 'http://www.equasis.org/EquasisWeb/restricted/ShipHistory?fs=ShipCertification'
+_company_url = 'http://www.equasis.org/EquasisWeb/restricted/CompanyInfo?fs=ShipInfo'
+_fleet_url = 'http://www.equasis.org/EquasisWeb/restricted/FleetInfo?fs=CompanyInfo'
 _ship_query_post = 'P_IMO='
 # POST
 _ship_search_url = 'http://www.equasis.org/EquasisWeb/restricted/ShipList?fs=ShipSearch'
-# init sqlite
-init_table_sql = 'create table ships (`imo_number` INT(8) NOT NULL primary key, `name` varchar(32),' \
-                 '`mmsi` int(10), `call_sign` varchar(8) ,`tonnage` int(8) ,' \
-                 '`type` varchar(64),`build_year` varchar(11),`flag` varchar(20),`status` varchar(40),' \
-                 '`last_update_time` varchar(11),`overview` text,`management_detail` text,`classification_status` text,' \
-                 '`classification_survey` text,`pi_info` text,`geo_info` text)'
 
 # Request queues
 ship_id_list = Queue()
 ship_id_count = 0
 ship_infos = Queue()
 
-# Regex objects
-_RE_SHIPID = re.compile(r'P_IMO.value=\'(\d+)\'')
-
 # Err msg
 no_page = 'No result has been found with your criteria.'
 no_ship = 'No ship has been found with your criteria'
 login_expire = 'You have not registered'
+_RE_SHIPID = re.compile(r'P_IMO.value=\'(\d+)\'')
 
-cursor = None
-conn = None
 
 # Record page crawling info
 current_ton_range = 99
 current_page = 1
-
-
-class Ship():
-    imo_number = 0
-    name = ''
-    mmsi = 0
-    call_sign = ''
-    tonnage = 0
-    type = ''
-    build_year = 0
-    flag = ''
-    status = ''
-    last_update = ''
-    overview_list = list()
-    management_detail_list = list()
-    classification_status = list()
-    classification_survey = list()
-    pi_info = list()
-    geo_info = list()
-
-    def add_overview(self, content, value):
-        self.overview_list.append(dict(overview=content, value=value))
-
-    def add_management(self, imo, role, company, address, date):
-        self.management_detail_list.append(dict(imo_num=imo, role=role, company=company, address=address, date_of_effect=date))
-
-    def add_class_stat(self, society, date, status, reason):
-        self.classification_status.append(dict(class_society=society, date_change_stat=date, status=status, reason=reason))
-
-    def add_class_survey(self, society, date, date_next, detail):
-        self.classification_survey.append(dict(class_society=society, date_last=date, date_next=date_next, detail=detail))
-
-    def add_pi(self, insurer, date):
-        self.pi_info.append(dict(insurer=insurer, date_inception=date))
-
-    def add_geo(self, date, area, source):
-        self.geo_info.append(dict(date_record=date, seen_area=area, source=source))
-
-    def list_to_str(self, l):
-        tmp = list()
-        for i in range(0, l.__len__()):
-            tmp.append(str(l.pop(0)))
-        s = string.join(tmp, '\n')
-        return s.replace("'", '|').replace('"', '|')
-
-    def dispose(self):
-        clear_list(self.overview_list)
-        clear_list(self.management_detail_list)
-        clear_list(self.classification_status)
-        clear_list(self.classification_survey)
-        clear_list(self.pi_info)
-        clear_list(self.geo_info)
-
-    def Commit(self):
-        global cursor, conn
-        sql = 'insert into ships (`imo_number`, `name`, `mmsi`, `call_sign`, `tonnage`, `type`,' \
-              ' `build_year`, `flag`, `status`, `last_update_time`, `overview`, `management_detail`,' \
-              ' `classification_status`, `classification_survey`,`pi_info`, `geo_info`) VALUES (%s,' \
-              ' "%s", %s, "%s", %s, "%s", %s, "%s", "%s", "%s", "%s", "%s", "%s", ' \
-              '      "%s", "%s", "%s")' % (self.imo_number, self.name, self.mmsi, self.call_sign,
-                                           self.tonnage, self.type, self.build_year, self.flag,
-                                           self.status, self.last_update, self.list_to_str(self.overview_list),
-                                           self.list_to_str(self.management_detail_list),
-                                           self.list_to_str(self.classification_status),
-                                           self.list_to_str(self.classification_survey),
-                                           self.list_to_str(self.pi_info), self.list_to_str(self.geo_info))
-        try:
-            cursor.execute(sql)
-            conn.commit()
-            log('#%s Ship successfully written into DB - %d.' % (self.imo_number, cursor.rowcount))
-        except sqlite3.OperationalError, ex:
-            log('DB EXCEPTION: %s' % ex.message)
 
 
 class MyIDParser(HTMLParser):
@@ -151,167 +73,9 @@ class MyIDParser(HTMLParser):
                     ship_id_count += 1
 
 
-class MyInfoParser(HTMLParser):
-    basic_info_flag = False
-    basic_info_flag_2 = False
-    ext_info_title_begin = False
-    ext_info_title_end = False
-    ext_info_start = False
-    current_ext_tag = ''
-    _list_basic_info = []
-    _list_overview = []
-    _list_manage_detail = []
-    _list_class_stat = []
-    _list_class_survey = []
-    _list_pi = []
-    _list_geo = []
-
-    def __init__(self):
-        self._list_basic_info = []
-        self._lit_overview = []
-        self._lit_manage_detail = []
-        self._lit_class_stat = []
-        self._lit_class_survey = []
-        self._lit_pi = []
-        self._list_geo = []
-        self.reset()
-
-    def handle_starttag(self, tag, attrs):
-        attr = dict()
-        attr['class'] = ''
-        attr['src'] = ''
-        for key, value in attrs:
-            attr[key] = value
-        if tag == 'td' and attr['class'] == 'bleugras':
-            self.basic_info_flag = True
-            self.basic_info_flag_2 = False
-            return
-        if tag == 'td' and self.basic_info_flag:
-            self.basic_info_flag = False
-            self.basic_info_flag_2 = True
-        if tag == 'img' and attr['src'] == '../Static/img/puce_triangle_tit.gif':
-            self.ext_info_title_begin = True
-            self.ext_info_title_end = False
-            return
-        if tag == 'tr' and (attr['class'] == 'lignej' or attr['class'] == 'ligneb'):
-            self.ext_info_start = True
-            return
-
-    def handle_endtag(self, tag):
-        if self.ext_info_start and tag == 'tr':
-            self.ext_info_start = False
-        pass
-
-    def handle_startendtag(self, tag, attrs):
-        pass
-
-    def handle_data(self, data):
-        if self.basic_info_flag and not self.basic_info_flag_2:
-            self._list_basic_info.append(data)
-        if self.basic_info_flag_2 and not self.basic_info_flag:
-            self._list_basic_info.append(data)
-            self.basic_info_flag_2 = False
-        if self.ext_info_title_begin and not self.ext_info_title_end:
-            self.current_ext_tag = data
-            self.ext_info_title_end = True
-            self.ext_info_title_begin = False
-        if self.ext_info_start:
-            if re.search('OVERVIEW', self.current_ext_tag):
-                self._list_overview.append(data)
-            elif re.search('Management', self.current_ext_tag):
-                self._list_manage_detail.append(data)
-            elif re.search('Classification status', self.current_ext_tag):
-                self._list_class_stat.append(data)
-            elif re.search('Classification survey', self.current_ext_tag):
-                self._list_class_survey.append(data)
-            elif re.search('P/I', self.current_ext_tag):
-                self._list_pi.append(data)
-            elif re.search('Geographical', self.current_ext_tag):
-                self._list_geo.append(data)
-            # print('%s : %s' % (self.current_ext_tag, data))
-
-    def handle_entityref(self, name):
-        if self.ext_info_start:
-            print('%s : <&%s>' % (self.current_ext_tag, name))
-
-    def get_basic_info(self):
-        res = []
-        for i in range(0, self._list_basic_info.__len__()):
-            res.append(self._list_basic_info.pop(0))
-        return res
-
-    def get_manage_detail(self):
-        res = []
-        for i in range(0, self._list_manage_detail.__len__()):
-            res.append(self._list_manage_detail.pop(0))
-        return res
-
-    def get_class_status(self):
-        res = []
-        for i in range(0, self._list_class_stat.__len__()):
-            res.append(self._list_class_stat.pop(0))
-        return res
-
-    def get_class_survey(self):
-        res = []
-        for i in range(0, self._list_class_survey.__len__()):
-            res.append(self._list_class_survey.pop(0))
-        return res
-
-    def get_pi_info(self):
-        res = []
-        for i in range(0, self._list_pi.__len__()):
-            res.append(self._list_pi.pop(0))
-        return res
-
-    def get_geographical_info(self):
-        res = []
-        for i in range(0, self._list_geo.__len__()):
-            res.append(self._list_geo.pop(0))
-        return res
-
-    def get_overview(self):
-        res = []
-        for i in range(0, self._list_overview.__len__()):
-            res.append(self._list_overview.pop(0))
-        return res
-
-    def dispose(self):
-        self._list_basic_info = None
-        self._list_manage_detail = None
-        self._list_class_stat = None
-        self._list_class_survey = None
-        self._list_overview = None
-        self._list_pi = None
-        self._list_geo = None
-
-
-def initSQLDb():
-    global cursor, conn
-    conn = sqlite3.connect('equasis.db')
-    cursor = conn.cursor()
-    try:
-        cursor.execute(init_table_sql)
-    except sqlite3.OperationalError:
-        pass
-    conn.commit()
-
-
 def clear_list(lst):
     while lst.__len__():
         lst.pop(0)
-
-
-def log(info):
-    if debug_mode:
-        print(time.strftime('%Y-%m-%d %H:%M:%S') + ' :' + info)
-    with open(_LOGFILE, 'a') as f:
-        f.writelines(time.strftime('%Y-%m-%d %H:%M:%S') + ' :' + info + '\r\n')
-
-
-def log_id(info):
-    with open('idlist.txt', 'a') as f:
-        f.writelines(info + '\r\n')
 
 
 def httprequest(method, url, data=''):
@@ -359,7 +123,7 @@ def user_supervisor():
             with open('user.list', 'r') as fp:
                 for line in fp.readlines():
                     _user_list.put(line.strip())
-
+        time.sleep(1)
 
 
 def check_login(content):
@@ -386,12 +150,12 @@ def crawl_ship():
     log('Process %s done.' % os.getpid())
 
 
-def query_ship(id):
+def query_ship(_id):
     global ship_id_count
-    log('Start querying ship ID #%s' % id)
-    resp = httprequest('POST', _ship_query_url, _ship_query_post + id)
+    log('Start querying ship ID #%s' % _id)
+    resp = httprequest('POST', _ship_query_url, _ship_query_post + _id)
     if resp.getcode() == 200:
-        log('200 OK get. Start parse data at #%s' % id)
+        log('200 OK get. Start parse data at #%s' % _id)
         parser = MyInfoParser()
         parser.reset()
         content = resp.read()
@@ -402,15 +166,139 @@ def query_ship(id):
             login()
             expire_count += 1
             log('Put back ship ID #%s to queue...')
-            ship_id_list.put(id)
+            ship_id_list.put(_id)
             ship_id_count += 1
             return
-        content = content.replace('&nbsp;', ' ')
-        content = content.replace('&', '/')
-        parser.feed(content)
-        basic = parser.get_basic_info()
         ship = Ship()
-        ship.imo_number = id
+        # Get page 1: Basic info
+        content = content.replace('&nbsp;', 'N/A').replace('</BR><BR>', '\r\n')
+        content = content.replace('&', '/').replace('<TD></TD>', '<TD>N/A</TD>')
+        parser.feed(content)
+        # Get company ids
+        companies = parser.get_company_ids()
+        companies = list(set(companies))
+        time.sleep(1)
+        # Get page 2: IMO convention
+        resp = httprequest('POST', _ship_imo_conv_url, _ship_query_post + _id)
+        log('IMO Convention Info at #' + _id)
+        content = resp.read()
+        content = content.replace('&nbsp;', 'N/A').replace('</BR><BR>', '\r\n')
+        content = content.replace('&', '/').replace('<TD></TD>', '<TD>N/A</TD>')
+        parser.feed(content)
+        time.sleep(1)
+        # Get page 3: PSC list
+        resp = httprequest('POST', _ship_psc_url, _ship_query_post + _id)
+        log('PSC Info at #' + _id)
+        content = resp.read()
+        content = content.replace('&nbsp;', 'N/A').replace('</BR><BR>', '\r\n')
+        content = content.replace('&', '/').replace('<TD></TD>', '<td>N/A</td>')
+        parser.feed(content)
+        time.sleep(1)
+        # Get page 4: History
+        resp = httprequest('POST', _ship_history_url, _ship_query_post + _id)
+        log('History info at #' + _id)
+        content = resp.read()
+        content = content.replace('&nbsp;', 'N/A').replace('</BR><BR>', '\r\n')
+        content = content.replace('&', '/').replace('<TD></TD>', '<td>N/A</td>')
+        parser.feed(content)
+        time.sleep(1)
+        # Get page 5: Inspect detail
+        insp_ids = parser.get_insp_id()
+        for i_id in insp_ids:
+            resp = httprequest('POST', _ship_inspect_url, 'P_IMO=' + _id + '&P_INSP=' + i_id)
+            log('Inspection detail at #' + _id + ',' + i_id)
+            content = resp.read()
+            content = content.replace('&nbsp;', 'N/A').replace('</BR><BR>', '\r\n')
+            content = content.replace('&', '/').replace('<TD></TD>', '<td>N/A</td>')
+            parser.feed(content)
+            time.sleep(1)
+        # Now to retrieve company infos
+
+        # ----
+        basic = parser.get_basic_info()
+        ship.imo_number = _id
+        for c_id in companies:
+            resp = httprequest('POST', _company_url, 'P_IMO=' + _id + '&P_COMP=' + c_id)
+            content = resp.read()
+            log('Company info #' + c_id)
+            content = content.replace('&nbsp;', 'N/A').replace('</BR><BR>', '\r\n')
+            content = content.replace('&', '/').replace('<TD></TD>', '<td>N/A</td>')
+            p_company = MyInfoParser()
+            p_company.feed(content)
+            # Company basic info
+            c_basicinfo = p_company.get_basic_info()
+            c_imo = ''
+            c_name = ''
+            c_addr = ''
+            c_last_up = ''
+            for i in range(0, c_basicinfo.__len__()-1, 2):
+                if re.search('IMO number', basic[i]):
+                    c_imo = c_basicinfo[i+1]
+                elif re.search('Name', basic[i]):
+                    c_name = c_basicinfo[i+1]
+                elif re.search('Address', basic[i]):
+                    c_addr = c_basicinfo[i+1]
+                elif re.search('Last update', basic[i]):
+                    c_last_up = c_basicinfo[i+1]
+            if c_imo:
+                ship.add_company_info(c_imo, c_name, c_addr, c_last_up)
+            clear_list(c_basicinfo)
+            # Company Overview
+            o = p_company.get_company_overview()
+            if o:
+                for i in range(0, o.__len__()-1, 2):
+                    ship.add_company_overview(c_id, o[i], o[i+1])
+            clear_list(o)
+            # Doc of Compliance
+            doc = p_company.get_doc_compliance()
+            if doc:
+                for i in range(0, doc.__len__()-1, 6):
+                    ship.add_doc_compliance(c_imo, doc[i], doc[i+1], doc[i+2],
+                                            doc[i+3], doc[i+4], doc[i+5])
+            clear_list(doc)
+            # Syn of Insp
+            so = p_company.get_synthesis_insp()
+            if so:
+                for i in range(0, so.__len__()-1, 6):
+                    ship.add_synthesis_inspection(c_imo, so[i], so[i+1], so[i+2],
+                                                  so[i+3], so[i+4], so[i+5])
+            clear_list(so)
+            # Class key
+            time.sleep(1)
+            resp = httprequest('POST', _fleet_url, 'P_PAGE=1&P_COMP=' + c_id)
+            log('Class key info at company #' + c_id)
+            content = resp.read()
+            content = content.replace('&nbsp;', 'N/A').replace('</BR><BR>', '\r\n')
+            content = content.replace('&', '/').replace('<TD></TD>', '<td>N/A</td>')
+            p_company.feed(content)
+            ck = p_company.get_class_key()
+            if ck:
+                for i in range(0, ck.__len__()-1, 2):
+                    ship.add_class_key(c_id, ck[i], ck[i+1])
+            clear_list(ck)
+            # Fleet
+
+            fleet_page = 1
+            parse_f = MyInfoParser()
+            while True:
+                resp = httprequest('POST', _fleet_url, 'P_COMP=' + c_id + '&P_PAGE=' + str(fleet_page))
+                content = resp.read()
+                log('Fleet #%s Page %d' % (c_id, fleet_page))
+                if not re.search('Class key', content):
+                    break
+                content = content.replace('&nbsp;', 'N/A').replace('</BR>', '\r\n').replace('<BR>', '')
+                content = content.replace('&', '/').replace('<TD></TD>', '<td>N/A</td>')
+                parse_f.feed(content)
+                fleet_page += 1
+                time.sleep(1)
+            fl = parse_f.get_fleet()
+            if fl:
+                for i in range(0, fl.__len__()-1, 9):
+                    ship.add_fleet(c_id, fl[i], fl[i+1], fl[i+2], fl[i+3], fl[i+4], fl[i+5],
+                                   fl[i+6], fl[i+7], fl[i+8])
+            clear_list(fl)
+            parse_f.dispose()
+            parse_f.close()
         # Basic info
         for i in range(0, basic.__len__()-1, 2):
             if re.match('IMO', basic[i]):
@@ -424,6 +312,8 @@ def query_ship(id):
                 ship.call_sign = basic[i+1]
             elif re.search('Gross tonnage', basic[i]):
                 ship.tonnage = int(basic[i+1])
+            elif re.search('DWT', basic[i]):
+                ship.dwt = basic[i+1]
             elif re.search('Type', basic[i]):
                 ship.type = basic[i+1]
             elif re.search('Year of build', basic[i]):
@@ -438,11 +328,11 @@ def query_ship(id):
                 pass
         clear_list(basic)
         # Overview
-        ovw = parser.get_overview()
-        if ovw:
-            for i in range(0, ovw.__len__()-1, 2):
-                ship.add_overview(ovw[i], ovw[i+1])
-        clear_list(ovw)
+        overview = parser.get_overview()
+        if overview:
+            for i in range(0, overview.__len__()-1, 2):
+                ship.add_overview(overview[i], overview[i+1])
+        clear_list(overview)
         # Management Detail
         md = parser.get_manage_detail()
         if md:
@@ -473,6 +363,55 @@ def query_ship(id):
             for i in range(0, ge.__len__()-1, 3):
                 ship.add_geo(ge[i], ge[i+1], ge[i+2])
         clear_list(ge)
+        # Safety Management Certificate
+        smc = parser.get_smc()
+        if smc:
+            for i in range(0, smc.__len__()-1, 7):
+                ship.add_smc(smc[i], smc[i+1], smc[i+2], smc[i+3], smc[i+4], smc[i+5], smc[i+6])
+        clear_list(smc)
+        # IMO Conventions
+        imoc = parser.get_imo_convention()
+        if imoc:
+            for i in range(0, imoc.__len__()-1, 2):
+                ship.add_imo_convention(imoc[i], imoc[i+1])
+        clear_list(imoc)
+        # PSC List
+        pscl = parser.get_psc_list()
+        if pscl:
+            for i in range(0, pscl.__len__()-1, 8):
+                ship.add_psc_list(pscl[i], pscl[i+1], pscl[i+2], pscl[i+3], pscl[i+4],
+                                  pscl[i+5], pscl[i+6], pscl[i+7])
+        clear_list(pscl)
+        # History name
+        hn = parser.get_history_name()
+        if hn:
+            for i in range(0, hn.__len__()-1, 3):
+                ship.add_history_name(hn[i], hn[i+1], hn[i+2])
+        clear_list(hn)
+        # History flag
+        hf = parser.get_history_flag()
+        if hf:
+            for i in range(0, hf.__len__()-1, 3):
+                ship.add_history_flag(hf[i], hf[i+1], hf[i+1])
+        clear_list(hf)
+        # History class
+        hc = parser.get_history_class()
+        if hc:
+            for i in range(0, hc.__len__()-1, 3):
+                ship.add_history_class(hc[i], hc[i+1], hc[i+2])
+        clear_list(hc)
+        # History Company
+        hcp = parser.get_history_company()
+        if hcp:
+            for i in range(0, hcp.__len__()-1, 4):
+                ship.add_history_company(hcp[i], hcp[i+1], hcp[i+2], hcp[i+3])
+        clear_list(hcp)
+        # Deficiencies
+        df = parser.get_deficiencies()
+        if df:
+            for i in range(0, df.__len__()-1, 3):
+                ship.add_deficiency(df[i], df[i+1], df[i+2])
+        clear_list(df)
         log('Parsing #%s complete. Starting to write to DB.' % ship.imo_number)
         if not ship.imo_number or not ship.name:
             log('Empty data line encountered. Put back ID #%s' % id)
@@ -527,21 +466,20 @@ def crawl_id():
                     break
                 par = MyIDParser()
                 par.feed(text)
-                if ship_id_count > 20:
-                    time.sleep(ship_id_count / 10)
+                time.sleep(2)
 
 if __name__ == '__main__':
     try:
         print('Starting to crawl....')
         # Preparations
         initSQLDb()
-        # p = Pool(processes=3)
         log('Starting to load user list file..')
         proc_user = Process(target=user_supervisor, args=())
         proc_user.start()
         time.sleep(3)
         log('Logging in...')
         login()
+
         # Load last status
         if os.path.exists('./id.last') and os.path.exists('./page.last'):
             with open('id.last', 'r') as f:
@@ -566,18 +504,16 @@ if __name__ == '__main__':
         proc_id.join()
         proc_ship.join()
         log('All process done.')
-
     except KeyboardInterrupt, ex:
         log('EXCEPTION: %s' % ex.message)
     finally:
-        cursor.close()
-        conn.close()
+        close_db()
         # Save state
         if not ship_id_list.empty():
             print('Saving status...')
             with open('id.last', 'w') as f:
                 while not ship_id_list.empty():
-                    f.writeline(ship_id_list.get() + '\n')
+                    f.write(ship_id_list.get() + '\n')
             with open('page.last', 'w') as f2:
-                f2.writeline(str(current_page) + '\n')
-                f2.writeline(str(current_ton_range))
+                f2.write(str(current_page) + '\n')
+                f2.write(str(current_ton_range))
