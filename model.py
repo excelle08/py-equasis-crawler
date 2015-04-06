@@ -3,6 +3,8 @@ __author__ = 'Excelle'
 from logger import log
 import time
 import sqlite3
+import re
+import random
 
 cursor = None
 conn = None
@@ -10,7 +12,7 @@ conn = None
 
 def initSQLDb():
     global cursor, conn
-    conn = sqlite3.connect('equasis.db')
+    conn = sqlite3.connect('equasis.db', timeout=30.0)
     cursor = conn.cursor()
     try:
         with open('db.sql', 'r') as f:
@@ -434,13 +436,16 @@ class Ship():
                     sql = 'insert into company_info(`imo_company`, `name`, `address`, `last_update`) ' \
                           'values(%s, "%s", "%s", "%s");' % (i['imo_company'], i['name'], i['address'], \
                            i['last_update'])
+                    log('Company IMO: ' + i['imo_company'])
                     cursor.execute(sql)
                 conn.commit()
-            except sqlite3.IntegrityError:
-                pass
+            except sqlite3.IntegrityError, e:
+                log(e.message)
 
             log('#%s Ship successfully written into DB - %d.' % (self.imo_number, cursor.rowcount))
         except Exception, ex:
             log('DB EXCEPTION: %s' % ex.message)
-            time.sleep(1)
-            self.Commit()
+            if re.search('locked', ex.message):
+                self.Commit()
+                time.sleep(random.uniform(0.5, 7))
+
