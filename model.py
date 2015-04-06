@@ -1,7 +1,7 @@
 __author__ = 'Excelle'
 
 from logger import log
-import string
+import time
 import sqlite3
 
 cursor = None
@@ -436,8 +436,11 @@ class Ship():
                            i['last_update'])
                     cursor.execute(sql)
                 conn.commit()
-            except sqlite3.OperationalError:
+            except sqlite3.IntegrityError:
                 pass
+
             log('#%s Ship successfully written into DB - %d.' % (self.imo_number, cursor.rowcount))
-        except sqlite3.OperationalError, ex:
+        except Exception, ex:
             log('DB EXCEPTION: %s' % ex.message)
+            time.sleep(1)
+            self.Commit()

@@ -47,6 +47,7 @@ ship_infos = Queue()
 # Err msg
 no_page = 'No result has been found with your criteria.'
 no_ship = 'No ship has been found with your criteria'
+too_many = 'Too many results. Please narrow your search down'
 login_expire = 'You have not registered'
 _RE_SHIPID = re.compile(r'P_IMO.value=\'(\d+)\'')
 
@@ -93,7 +94,7 @@ def httprequest(method, url, data=''):
         reqobj.add_header('Content-Type', 'application/x-www-form-urlencoded')
         reqobj.add_header('Content-Length', str(len(data)))
         reqobj.add_data(data)
-    u = urllib2.urlopen(reqobj)
+    u = urllib2.urlopen(reqobj, timeout=10)
     return u
 
 
@@ -143,7 +144,7 @@ def crawl_ship():
         try:
             query_ship(_id)
             last_id = ''
-        except urllib2.HTTPError, e:
+        except Exception, e:
             log('HTTP EXCEPTION: %s When querying #%s' % (e.message, _id))
             last_id = _id
 
@@ -464,9 +465,13 @@ def crawl_id():
                 if re.search(no_page, text):
                     current_page = 1
                     break
+                if re.search(too_many, text):
+                    log('Too many results at page %d with range %d-%d' % (current_page, val+1, val+5))
+                    current_page = 1
+                    break
                 par = MyIDParser()
                 par.feed(text)
-                time.sleep(2)
+                time.sleep(20)
 
 if __name__ == '__main__':
     try:
@@ -496,13 +501,33 @@ if __name__ == '__main__':
         proc_id.start()
         time.sleep(5)
         proc_ship = Process(target=crawl_ship, args=())
+        proc_ship2 = Process(target=crawl_ship, args=())
+        proc_ship3 = Process(target=crawl_ship, args=())
+        proc_ship4 = Process(target=crawl_ship, args=())
+        proc_ship5 = Process(target=crawl_ship, args=())
+        proc_ship6 = Process(target=crawl_ship, args=())
         proc_ship.start()
+        time.sleep(0.5)
+        proc_ship2.start()
+        time.sleep(0.5)
+        proc_ship3.start()
+        time.sleep(0.5)
+        proc_ship4.start()
+        time.sleep(0.5)
+        proc_ship5.start()
+        time.sleep(0.5)
+        proc_ship6.start()
 
         print('Doing all processes...')
 
         proc_user.join()
         proc_id.join()
         proc_ship.join()
+        proc_ship2.join()
+        proc_ship3.join()
+        proc_ship4.join()
+        proc_ship5.join()
+        proc_ship6.join()
         log('All process done.')
     except KeyboardInterrupt, ex:
         log('EXCEPTION: %s' % ex.message)
