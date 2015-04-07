@@ -8,7 +8,7 @@ from logger import log, log_id
 from HTMLParser import HTMLParser
 from model import initSQLDb, Ship, close_db
 from parsers import MyInfoParser
-from multiprocessing import Queue, Process, Lock
+from multiprocessing import Queue, Process
 
 '''
     1.Login and capture SESSIONID
@@ -42,7 +42,6 @@ _ship_search_url = 'http://www.equasis.org/EquasisWeb/restricted/ShipList?fs=Shi
 # Request queues
 ship_id_list = Queue()
 ship_id_count = 0
-ship_infos = Queue()
 
 # Err msg
 no_page = 'No result has been found with your criteria.'
@@ -56,8 +55,8 @@ _RE_SHIPID = re.compile(r'P_IMO.value=\'(\d+)\'')
 current_ton_range = 99
 current_page = 1
 
-# Lock that controls database insertion
-db_lock = Lock()
+# Ship info list pending to be written to DB
+ship_infos = Queue()
 
 
 class MyIDParser(HTMLParser):
@@ -420,13 +419,8 @@ def query_ship(_id):
             log('Empty data line encountered. Put back ID #%s' % id)
             ship_id_list.put(id)
         else:
-            # Commit database transcation
-            # In other not to trigger DB_Blocked exception
-            db_lock.acquire()
-            try:
-                ship.Commit()
-            finally:
-                db_lock.release()
+            # Save the ship info to the queue in order for concentrated commission
+            ship_infos.put(ship)
 
         ship.dispose()
         parser.close()
@@ -526,6 +520,11 @@ if __name__ == '__main__':
         time.sleep(3)
         proc_ship6.start()
 
+        print('Following ship list queue and commit them to DB.')
+        while not ship_id_list.empty():
+            time.sleep(60)
+            s = ship_infos.get()
+            s.Commit()
         print('Doing all processes...')
 
         proc_user.join()
