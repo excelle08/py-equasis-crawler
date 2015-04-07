@@ -53,13 +53,13 @@ class Ship():
     flag = ''
     status = ''
     last_update = ''
-    overview_list = []
-    management_detail_list = []
-    classification_status = []
-    classification_survey = []
-    smc_info = []
-    pi_info = []
-    geo_info = []
+    overview_list = list()
+    management_detail_list = list()
+    classification_status = list()
+    classification_survey = list()
+    smc_info = list()
+    pi_info = list()
+    geo_info = list()
     imo_convention = list()
     psc_info = list()
     list_psc = list()
@@ -216,6 +216,28 @@ class Ship():
         self.company_info.append(dict(imo_company=imo, name=addslashes(name),
                                       address=addslashes(address), last_update=last_update))
 
+    def dispose(self):
+        clear_list(self.overview_list)
+        clear_list(self.management_detail_list)
+        clear_list(self.classification_status)
+        clear_list(self.classification_survey)
+        clear_list(self.pi_info)
+        clear_list(self.smc_info)
+        clear_list(self.geo_info)
+        clear_list(self.imo_convention)
+        clear_list(self.psc_info)
+        clear_list(self.list_psc)
+        clear_list(self.list_deficiencies)
+        clear_list(self.history_name)
+        clear_list(self.history_flag)
+        clear_list(self.history_class)
+        clear_list(self.history_company)
+        clear_list(self.company_overview)
+        clear_list(self.doc_compliance)
+        clear_list(self.synthesis_inspection)
+        clear_list(self.fleet)
+        clear_list(self.class_key)
+
     def Commit(self):
         global cursor, conn
         sql = ''
@@ -289,7 +311,21 @@ class Ship():
                       (self.imo_number, self.name, self.mmsi, self.call_sign, i['convention'],
                        i['status'])
                 cursor.execute(sql)
-
+                '''
+            # Insert PSC Info table
+            for i in self.psc_info:
+                sql = 'insert into psc_info (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                      '`year_of_build`, `tonnage`, `deadweight`, `type_ship`,' \
+                      '`flag_ship`, `class_society`, `particular_of_company`, `name_authority`,' \
+                      '`place_insp`, `date_insp`, `ship_detained`, `num_deficiencies`) values' \
+                      '(%s, "%s", %s, "%s", "%s", %s, %s, "%s", "%s", "%s", "%s", "%s",' \
+                      '"%s", "%s", "%s", "%s");' % \
+                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['year_of_build'],
+                      i['tonnage'], i['deadweight'], i['type_ship'], i['flag_sihp'], i['class_society'],
+                      i['particular_of_company'], i['name_authority'], i['place_insp'], i['date_insp'],
+                      i['ship_detained'], i['num_deficiencies'])
+                cursor.execute(sql)
+                '''
             # Insert PSC List
             for i in self.list_psc:
                 sql = 'insert into list_psc (`imo_number`, `name`, `mmsi`, `call_sign`, ' \

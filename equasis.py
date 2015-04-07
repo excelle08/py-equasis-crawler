@@ -9,7 +9,6 @@ from HTMLParser import HTMLParser
 from model import initSQLDb, Ship, close_db
 from parsers import MyInfoParser
 from multiprocessing import Queue, Process
-from multiprocessing.queues import SimpleQueue
 
 '''
     1.Login and capture SESSIONID
@@ -18,10 +17,9 @@ from multiprocessing.queues import SimpleQueue
     4.Parse SHIPID and PageID
 '''
 
-_user_name = 'ab@fstech.host56.com'
+_user_name = ''
 _user_list = Queue()
-# Ship info list pending to be written to DB
-ship_info_list = Queue()
+company_list = []
 expire_count = 0
 _user_pwd = '1234567'
 base_url = 'http://www.equasis.org'
@@ -56,6 +54,9 @@ _RE_SHIPID = re.compile(r'P_IMO.value=\'(\d+)\'')
 # Record page crawling info
 current_ton_range = 99
 current_page = 1
+
+# Ship info list pending to be written to DB
+ship_infos = Queue()
 
 
 class MyIDParser(HTMLParser):
@@ -133,7 +134,7 @@ def check_login(content):
 
 
 def crawl_ship():
-    global ship_id_count, ship_info_list
+    global ship_id_count
     log('Ship info crawler: Starting process: %s' % os.getpid())
     is_ok = True
     while not ship_id_list.empty():
@@ -141,14 +142,7 @@ def crawl_ship():
         if is_ok:
             ship_id_count -= 1
         try:
-            result = query_ship(_id)
-            if result:
-                # ------debug---------
-                print result.overview_list
-                print result.classification_status
-                print result.imo_number
-                # -------------------
-                ship_info_list.put(result)
+            query_ship(_id)
             is_ok = True
         except Exception, e:
             log('HTTP EXCEPTION: %s When querying #%s - Put back to queue.' % (e.message, _id))
@@ -424,12 +418,18 @@ def query_ship(_id):
         if not ship.imo_number or not ship.name:
             log('Empty data line encountered. Put back ID #%s' % id)
             ship_id_list.put(id)
-            return None
         else:
-            return ship
+            # Save the ship info to the queue in order for concentrated commission
+            ship_infos.put(ship)
+
+        ship.dispose()
+        parser.close()
+        content = ''
+        resp.close()
+        pass
+
     else:
         log('Error HTTP status: %d' % resp.getcode())
-        return None
 
 
 def crawl_id():
@@ -475,20 +475,6 @@ def crawl_id():
                 par.feed(text)
                 time.sleep(20)
 
-
-def db_supervisor():
-    global ship_info_list
-    while not ship_id_list.empty():
-        time.sleep(30)
-        while ship_info_list.empty():
-            s = ship_info_list.get()
-            # ------debug---------
-            print s.overview_list
-            print s.classification_status
-            print s.imo_number
-            # -------------------
-            s.Commit()
-
 if __name__ == '__main__':
     try:
         print('Starting to crawl....')
@@ -517,38 +503,39 @@ if __name__ == '__main__':
         proc_id.start()
         time.sleep(5)
         proc_ship = Process(target=crawl_ship, args=())
-        # proc_ship2 = Process(target=crawl_ship, args=())
-        # proc_ship3 = Process(target=crawl_ship, args=())
-        # proc_ship4 = Process(target=crawl_ship, args=())
-        # proc_ship5 = Process(target=crawl_ship, args=())
-        # proc_ship6 = Process(target=crawl_ship, args=())
-        proc_db = Process(target=db_supervisor, args=())
+        proc_ship2 = Process(target=crawl_ship, args=())
+        proc_ship3 = Process(target=crawl_ship, args=())
+        proc_ship4 = Process(target=crawl_ship, args=())
+        proc_ship5 = Process(target=crawl_ship, args=())
+        proc_ship6 = Process(target=crawl_ship, args=())
         proc_ship.start()
-        proc_db.start()
-        # time.sleep(0.5)
-        # proc_ship2.start()
-        # time.sleep(1)
-        # proc_ship3.start()
-        # time.sleep(1.5)
-        # proc_ship4.start()
-        # time.sleep(2)
-        # proc_ship5.start()
-        # time.sleep(3)
-        # proc_ship6.start()
+        time.sleep(0.5)
+        proc_ship2.start()
+        time.sleep(1)
+        proc_ship3.start()
+        time.sleep(1.5)
+        proc_ship4.start()
+        time.sleep(2)
+        proc_ship5.start()
+        time.sleep(3)
+        proc_ship6.start()
 
         print('Following ship list queue and commit them to DB.')
-
+        while not ship_id_list.empty():
+            time.sleep(60)
+            while not ship_infos.empty():
+                s = ship_infos.get()
+                s.Commit()
         print('Doing all processes...')
 
         proc_user.join()
         proc_id.join()
-        proc_db.join()
         proc_ship.join()
-        # proc_ship2.join()
-        # proc_ship3.join()
-        # proc_ship4.join()
-        # proc_ship5.join()
-        # proc_ship6.join()
+        proc_ship2.join()
+        proc_ship3.join()
+        proc_ship4.join()
+        proc_ship5.join()
+        proc_ship6.join()
         log('All process done.')
     except KeyboardInterrupt, ex:
         log('EXCEPTION: %s' % ex.message)
