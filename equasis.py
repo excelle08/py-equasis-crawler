@@ -523,8 +523,9 @@ if __name__ == '__main__':
         print('Following ship list queue and commit them to DB.')
         while not ship_id_list.empty():
             time.sleep(60)
-            s = ship_infos.get()
-            s.Commit()
+            while not ship_infos.empty():
+                s = ship_infos.get()
+                s.Commit()
         print('Doing all processes...')
 
         proc_user.join()
