@@ -2,7 +2,7 @@ __author__ = 'Excelle'
 
 from logger import log
 import time
-import sqlite3
+import mysql.connector
 import re
 import random
 
@@ -12,18 +12,8 @@ conn = None
 
 def initSQLDb():
     global cursor, conn
-    conn = sqlite3.connect('equasis.db', timeout=30.0)
+    conn = mysql.connector.connect(user='root', password='zgsdzlx', database='equasis', use_unicode=True)
     cursor = conn.cursor()
-    try:
-        with open('db.sql', 'r') as f:
-            init_table_sql = f.read()
-        init_table_sql = init_table_sql.replace('\n', '')
-        sql_cmd = init_table_sql.split(';')
-        for i in sql_cmd:
-            cursor.execute(i)
-    except sqlite3.OperationalError, e:
-        pass
-    conn.commit()
 
 
 def close_db():
@@ -439,7 +429,7 @@ class Ship():
                     log('Company IMO: ' + i['imo_company'])
                     cursor.execute(sql)
                 conn.commit()
-            except sqlite3.IntegrityError, e:
+            except Exception, e:
                 log(e.message)
 
             log('#%s Ship successfully written into DB - %d.' % (self.imo_number, cursor.rowcount))

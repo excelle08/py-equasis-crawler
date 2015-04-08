@@ -1,3 +1,7 @@
+create database equasis;
+use equasis;
+
+
 create table ships (
     `imo_number` INT(8) NOT NULL primary key,
     `name` varchar(32),

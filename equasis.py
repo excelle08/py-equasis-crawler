@@ -55,9 +55,6 @@ _RE_SHIPID = re.compile(r'P_IMO.value=\'(\d+)\'')
 current_ton_range = 99
 current_page = 1
 
-# Ship info list pending to be written to DB
-ship_infos = Queue()
-
 
 class MyIDParser(HTMLParser):
 
@@ -420,7 +417,7 @@ def query_ship(_id):
             ship_id_list.put(id)
         else:
             # Save the ship info to the queue in order for concentrated commission
-            ship_infos.put(ship)
+            ship.Commit()
 
         ship.dispose()
         parser.close()
@@ -439,7 +436,8 @@ def crawl_id():
 
     for val in range(start_ton, 403345, 5):
         while True:
-            _ship_search_post = 'P_PAGE=' + str(current_page) + '&P_IMO=&P_CALLSIGN=&P_NAME=&P_MMSI=&P_GT_GT=' + str(val+1) \
+            try:
+                _ship_search_post = 'P_PAGE=' + str(current_page) + '&P_IMO=&P_CALLSIGN=&P_NAME=&P_MMSI=&P_GT_GT=' + str(val+1) \
                                 + '&P_GT_LT=' + str(val+5) + '&P_DW_GT=&P_DW_LT=&P_CatTypeShip_rb=HC&P_CatTypeShip_p2=' \
                                                              '&P_CatTypeShip_p3=%A0%A0%A0%A0%A0%A0%A0%A0%A0%A0%A0%A0&' \
                                                              'P_YB_GT=&P_YB_LT=&P_FLAG_rb=HC&P_FLAG_p2=&' \
@@ -449,31 +447,37 @@ def crawl_id():
                                                              'P_CLASS_ST_rb=HC&P_CLASS_ST_p2=&' \
                                                              'P_CLASS_ST_p3=%A0%A0%A0%A0%A0%A0%A0%A0%A0%A0%A0%A0&' \
                                                              'Submit=SEARCH'
-            resp = httprequest('POST', _ship_search_url, _ship_search_post)
-            log('Getting IDs from page %d with range %d-%d' % (current_page, val+1, val+5))
-            current_page += 1
-            current_ton_range = val
-            if resp.getcode() == 200:
-                log('200 OK Get. Starting reading.')
-                text = resp.read()
-                if not check_login(text):
-                    global expire_count
-                    log('Expired. Relogin')
-                    expire_count += 1
-                    login()
-                    current_page -= 1
-                    continue
+                resp = httprequest('POST', _ship_search_url, _ship_search_post)
+                log('Getting IDs from page %d with range %d-%d' % (current_page, val+1, val+5))
+                current_page += 1
+                current_ton_range = val
+                if resp.getcode() == 200:
+                    log('200 OK Get. Starting reading.')
+                    text = resp.read()
+                    if not check_login(text):
+                        global expire_count
+                        log('Expired. Relogin')
+                        expire_count += 1
+                        login()
+                        current_page -= 1
+                        continue
 
-                if re.search(no_page, text):
+                    if re.search(no_page, text):
+                        current_page = 1
+                        break
+                    if re.search(too_many, text):
+                        log('Too many results at page %d with range %d-%d' % (current_page, val+1, val+5))
+                        current_page = 1
+                        break
+                    par = MyIDParser()
+                    par.feed(text)
+                    time.sleep(20)
+            except Exception, e:
+                log('Exception when querying ID: ' + e.message)
+                if current_page > 1:
+                    current_page -= 1
+                else:
                     current_page = 1
-                    break
-                if re.search(too_many, text):
-                    log('Too many results at page %d with range %d-%d' % (current_page, val+1, val+5))
-                    current_page = 1
-                    break
-                par = MyIDParser()
-                par.feed(text)
-                time.sleep(20)
 
 if __name__ == '__main__':
     try:
@@ -520,12 +524,6 @@ if __name__ == '__main__':
         time.sleep(3)
         proc_ship6.start()
 
-        print('Following ship list queue and commit them to DB.')
-        while not ship_id_list.empty():
-            time.sleep(60)
-            while not ship_infos.empty():
-                s = ship_infos.get()
-                s.Commit()
         print('Doing all processes...')
 
         proc_user.join()
