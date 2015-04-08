@@ -9,6 +9,7 @@ from HTMLParser import HTMLParser
 from model import initSQLDb, Ship, close_db
 from parsers import MyInfoParser
 from multiprocessing import Queue, Process
+from threading import Thread, Lock
 
 '''
     1.Login and capture SESSIONID
@@ -16,7 +17,7 @@ from multiprocessing import Queue, Process
     3.Analyze the HTML page.
     4.Parse SHIPID and PageID
 '''
-
+db_lock = Lock()
 _user_name = ''
 _user_list = Queue()
 company_list = []
@@ -141,7 +142,7 @@ def crawl_ship():
         try:
             query_ship(_id)
             is_ok = True
-        except Exception, e:
+        except urllib2.HTTPError, e:
             log('HTTP EXCEPTION: %s When querying #%s - Put back to queue.' % (e.message, _id))
             ship_id_list.put(_id)
             is_ok = False
@@ -417,7 +418,11 @@ def query_ship(_id):
             ship_id_list.put(id)
         else:
             # Save the ship info to the queue in order for concentrated commission
-            ship.Commit()
+            db_lock.acquire()
+            try:
+                ship.Commit()
+            finally:
+                db_lock.release()
 
         ship.dispose()
         parser.close()
@@ -506,12 +511,12 @@ if __name__ == '__main__':
         proc_id = Process(target=crawl_id, args=())
         proc_id.start()
         time.sleep(5)
-        proc_ship = Process(target=crawl_ship, args=())
-        proc_ship2 = Process(target=crawl_ship, args=())
-        proc_ship3 = Process(target=crawl_ship, args=())
-        proc_ship4 = Process(target=crawl_ship, args=())
-        proc_ship5 = Process(target=crawl_ship, args=())
-        proc_ship6 = Process(target=crawl_ship, args=())
+        proc_ship =  Thread(target=crawl_ship, args=())
+        proc_ship2 = Thread(target=crawl_ship, args=())
+        proc_ship3 = Thread(target=crawl_ship, args=())
+        proc_ship4 = Thread(target=crawl_ship, args=())
+        proc_ship5 = Thread(target=crawl_ship, args=())
+        proc_ship6 = Thread(target=crawl_ship, args=())
         proc_ship.start()
         time.sleep(0.5)
         proc_ship2.start()
