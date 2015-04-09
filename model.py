@@ -238,211 +238,219 @@ class Ship():
         clear_list(self.fleet)
         clear_list(self.class_key)
 
-    def Commit(self):
+    def Commit(self, pid=str(time.time)):
         global cursor, conn
         sql = ''
         try:
-            # Insert basic info table
-            sql = 'insert into ships (`imo_number`, `name`, `mmsi`, `call_sign`, `tonnage`, `DWT`, `type`,' \
-                  '`build_year`, `flag`, `status`, `last_update_time`) VALUES' \
-                  '(%s, "%s", %s, "%s", %s, "%s", "%s",' \
-                  ' %s, "%s", "%s", "%s");' % \
-                  (self.imo_number, self.name, self.mmsi, self.call_sign,
-                   self.tonnage, self.dwt, self.type, self.build_year, self.flag, self.status, self.last_update, )
-            cursor.execute(sql)
-            # Insert overview table
-            for i in self.overview_list:
-                sql = 'insert into overview (`imo_number`, `name`, `mmsi`, `call_sign`, `overview`, `value`) VALUES' \
-                      '(%s, "%s", %s, "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['overview'], i['value'])
-                cursor.execute(sql)
-            # Insert Management detail table
-            for i in self.management_detail_list:
-                sql = 'insert into management_detail (`imo_number_ship`, `name_ship`, `mmsi`, `call_sign`, `imo_company`,' \
-                      '`role`, `name_company`, `address`, `date_effect`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_num'], i['role'], i['company'],
-                       i['address'], i['date_of_effect'])
-                cursor.execute(sql)
-            # Insert class status table
-            for i in self.classification_status:
-                sql = 'insert into classification_status (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`class_society`, `date_change_status`, `status`, `reason`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'], i['date_change_stat'],
-                       i['status'], i['reason'])
-                cursor.execute(sql)
-            # Insert classification survey table
-            for i in self.classification_survey:
-                sql = 'insert into classification_survey (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`class_society`, `last_renew_date`, `next_renew_date`) VALUES' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s")' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'], i['date_last'],
-                       i['date_next'])
-                cursor.execute(sql)
-            # Insert PI table
-            for i in self.pi_info:
-                sql = 'insert into pi_info (`imo_number`, `name`, `mmsi`, `call_sign`, `name_insurer`, `date_inception`)' \
-                      'values (%s, "%s", %s, "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['insurer'], i['date_inception'])
-                cursor.execute(sql)
-            # Insert Geographical info table
-            for i in self.geo_info:
-                sql = 'insert into geo_info (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`date_record`, `area`, `source`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['date_record'],
-                       i['seen_area'], i['source'])
-                cursor.execute(sql)
-            # Insert SMC info table
-            for i in self.smc_info:
-                sql = 'insert into smc (`imo_number`, `name`, `mmsi`, `call_sign`, `class_society`,' \
-                      '`date_survey`, `date_expiry`, `date_change_status`,' \
-                      '`status`, `reason`, `cv`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s");' % \
-                       (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'],
-                        i['date_survey'], i['date_expiry'], i['date_change'], i['status'],
-                        i['reason'], i['cv'])
-                cursor.execute(sql)
-            # Insert IMO Conventions table
-            for i in self.imo_convention:
-                sql = 'insert into imo_conventions (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`convention`, `status`) values (%s, "%s", %s, "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['convention'],
-                       i['status'])
-                cursor.execute(sql)
-                '''
-            # Insert PSC Info table
-            for i in self.psc_info:
-                sql = 'insert into psc_info (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`year_of_build`, `tonnage`, `deadweight`, `type_ship`,' \
-                      '`flag_ship`, `class_society`, `particular_of_company`, `name_authority`,' \
-                      '`place_insp`, `date_insp`, `ship_detained`, `num_deficiencies`) values' \
-                      '(%s, "%s", %s, "%s", "%s", %s, %s, "%s", "%s", "%s", "%s", "%s",' \
-                      '"%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['year_of_build'],
-                      i['tonnage'], i['deadweight'], i['type_ship'], i['flag_sihp'], i['class_society'],
-                      i['particular_of_company'], i['name_authority'], i['place_insp'], i['date_insp'],
-                      i['ship_detained'], i['num_deficiencies'])
-                cursor.execute(sql)
-                '''
-            # Insert PSC List
-            for i in self.list_psc:
-                sql = 'insert into list_psc (`imo_number`, `name`, `mmsi`, `call_sign`, ' \
-                      '`psc_org`, `authority`, `port_of_insp`, `type_of_insp`,' \
-                      '`date_report`, `detention`, `duration`, `num_deficiencies`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['psc_org'],
-                       i['authority'], i['port_of_insp'], i['type_of_insp'], i['date_report'],
-                       i['detention'], i['duration'], i['num_deficiencies'])
-                cursor.execute(sql)
-            # Insert deficiencies table
-            for i in self.list_deficiencies:
-                sql = 'insert into deficiencies (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`category`, `deficiency`, `number`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['category'],
-                       i['deficiency'], i['number'])
-                cursor.execute(sql)
-            # Insert history name table
-            for i in self.history_name:
-                sql = 'insert into history_name (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '    `former_name`, `date_effect`, `source`) values' \
-                      '   (%s, "%s", %s, "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['former_name'],
-                       i['date_effect'], i['source'])
-                cursor.execute(sql)
-            # Insert history flag table
-            for i in self.history_flag:
-                sql = 'insert into history_flag (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '    `flag`, `date_effect`, `source`) values' \
-                      '   (%s, "%s", %s, "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['flag'],
-                       i['date_effect'], i['source'])
-                cursor.execute(sql)
-            conn.commit()
-            # Insert history class
-            for i in self.history_class:
-                sql = 'insert into history_class (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`class_society`, `date_survey`, `source`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'],
-                       i['date_survey'], i['source'])
-                cursor.execute(sql)
-            # Insert history company
-            for i in self.history_company:
-                sql = 'insert into history_company (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`company`, `role`, `date_effect`, `source`) values' \
-                      '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['company'],
-                      i['role'], i['date_effect'], i['source'])
-                cursor.execute(sql)
-            # Insert company overview
-            for i in self.company_overview:
-                sql = 'insert into company_overview (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '        `imo_company`, `overview`, `value`) values' \
-                      '       (%s, "%s", %s, "%s", %s, "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
-                       i['overview'], i['value'])
-                cursor.execute(sql)
-            # Insert document compliance record
-            for i in self.doc_compliance:
-                sql = 'insert into doc_compliance (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '      `imo_company`, `flag`, `ship_type`,`class_society`,' \
-                      '      `status`, `date_of_status`, `reason`) values' \
-                      '     (%s, "%s", %s, "%s", %s, "%s", "%s", "%s", "%s",' \
-                      '     "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
-                       i['flag'], i['ship_type'], i['class_society'], i['status'], i['date_of_status'],
-                       i['reason'])
-                cursor.execute(sql)
-            # Insert synthesis inspection
-            for i in self.synthesis_inspection:
-                sql = 'insert into synthesis_inspection (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '            `imo_company`, `role`, `nb_ships`,`last_3y_this_company_insp`,' \
-                      '            `last_3y_this_company_dete`, `last_3y_all_company_insp`,' \
-                      '            `last_3y_all_company_dete`) values' \
-                      '           (%s, "%s", %s, "%s", %s, "%s", "%s", "%s", "%s",' \
-                      '           "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
-                       i['role'], i['nb_ships'], i['last_3y_this_company_insp'], i['last_3y_this_company_dete'],
-                       i['last_3y_all_company_insp'], i['last_3y_all_company_dete'])
-                cursor.execute(sql)
-            # Insert fleet
-            for i in self.fleet:
-                sql = 'insert into fleet (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      ' `imo_company`, `ship_imo_and_name`, `tonnage`,`ship_type`,' \
-                      ' `year_build`, `current_flag`, `current_class`, `detentions_3yr_this_comp`,' \
-                      ' `detentions_3yr_all_comp`, `acting_as`) values' \
-                      '(%s, "%s", %s, "%s", %s, "%s", %s, "%s", "%s",' \
-                      '"%s", "%s", "%s", "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
-                      i['imo_ship_name'], i['tonnage'], i['ship_type'], i['year_build'], i['current_flag'],
-                      i['current_class'], i['detentions_3yr_this_comp'], i['detentions_3yr_all_comp'],
-                      i['acting_as'])
-                cursor.execute(sql)
-            # Insert class key
-            for i in self.class_key:
-                sql = 'insert into class_key (`imo_number`, `name`, `mmsi`, `call_sign`,' \
-                      '`imo_company`, `abbr`, `name_of_society`) values' \
-                      '(%s, "%s", %s, "%s", %s, "%s", "%s");' % \
-                      (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
-                       i['abbr'], i['name_of_society'])
-                cursor.execute(sql)
-            conn.commit()
-            try:
-                # Insert company info
-                for i in self.company_info:
-                    sql = 'insert into company_info(`imo_company`, `name`, `address`, `last_update`) ' \
-                          'values(%s, "%s", "%s", "%s");' % (i['imo_company'], i['name'], i['address'], \
-                           i['last_update'])
-                    log('Company IMO: ' + i['imo_company'])
-                    cursor.execute(sql)
-                conn.commit()
-            except sqlite3.IntegrityError, e:
-                log(e.message)
+            with open(str(pid) + '.sql', 'a') as fp:
+                # Insert basic info table
+                sql = 'insert into ships (`imo_number`, `name`, `mmsi`, `call_sign`, `tonnage`, `DWT`, `type`,' \
+                      '`build_year`, `flag`, `status`, `last_update_time`) VALUES' \
+                      '(%s, "%s", %s, "%s", %s, "%s", "%s",' \
+                      ' %s, "%s", "%s", "%s");\r\n' % \
+                      (self.imo_number, self.name, self.mmsi, self.call_sign,
+                       self.tonnage, self.dwt, self.type, self.build_year, self.flag, self.status, self.last_update, )
+                fp.write(sql)
+                # cursor.execute(sql)
+                # Insert overview table
+                for i in self.overview_list:
+                    sql = 'insert into overview (`imo_number`, `name`, `mmsi`, `call_sign`, `overview`, `value`) VALUES' \
+                          '(%s, "%s", %s, "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['overview'], i['value'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert Management detail table
+                for i in self.management_detail_list:
+                    sql = 'insert into management_detail (`imo_number_ship`, `name_ship`, `mmsi`, `call_sign`, `imo_company`,' \
+                          '`role`, `name_company`, `address`, `date_effect`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_num'], i['role'], i['company'],
+                           i['address'], i['date_of_effect'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert class status table
+                for i in self.classification_status:
+                    sql = 'insert into classification_status (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`class_society`, `date_change_status`, `status`, `reason`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'], i['date_change_stat'],
+                           i['status'], i['reason'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert classification survey table
+                for i in self.classification_survey:
+                    sql = 'insert into classification_survey (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`class_society`, `last_renew_date`, `next_renew_date`) VALUES' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'], i['date_last'],
+                           i['date_next'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert PI table
+                for i in self.pi_info:
+                    sql = 'insert into pi_info (`imo_number`, `name`, `mmsi`, `call_sign`, `name_insurer`, `date_inception`)' \
+                          'values (%s, "%s", %s, "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['insurer'], i['date_inception'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert Geographical info table
+                for i in self.geo_info:
+                    sql = 'insert into geo_info (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`date_record`, `area`, `source`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['date_record'],
+                           i['seen_area'], i['source'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert SMC info table
+                for i in self.smc_info:
+                    sql = 'insert into smc (`imo_number`, `name`, `mmsi`, `call_sign`, `class_society`,' \
+                          '`date_survey`, `date_expiry`, `date_change_status`,' \
+                          '`status`, `reason`, `cv`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s");\r\n' % \
+                           (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'],
+                            i['date_survey'], i['date_expiry'], i['date_change'], i['status'],
+                            i['reason'], i['cv'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert IMO Conventions table
+                for i in self.imo_convention:
+                    sql = 'insert into imo_conventions (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`convention`, `status`) values (%s, "%s", %s, "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['convention'],
+                           i['status'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
 
-            log('#%s Ship successfully written into DB - %d.' % (self.imo_number, cursor.rowcount))
+                # Insert PSC List
+                for i in self.list_psc:
+                    sql = 'insert into list_psc (`imo_number`, `name`, `mmsi`, `call_sign`, ' \
+                          '`psc_org`, `authority`, `port_of_insp`, `type_of_insp`,' \
+                          '`date_report`, `detention`, `duration`, `num_deficiencies`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['psc_org'],
+                           i['authority'], i['port_of_insp'], i['type_of_insp'], i['date_report'],
+                           i['detention'], i['duration'], i['num_deficiencies'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert deficiencies table
+                for i in self.list_deficiencies:
+                    sql = 'insert into deficiencies (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`category`, `deficiency`, `number`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['category'],
+                           i['deficiency'], i['number'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert history name table
+                for i in self.history_name:
+                    sql = 'insert into history_name (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '    `former_name`, `date_effect`, `source`) values' \
+                          '   (%s, "%s", %s, "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['former_name'],
+                           i['date_effect'], i['source'])
+                    fp.write(sql)
+                # cursor.execute(sql)
+                # Insert history flag table
+                for i in self.history_flag:
+                    sql = 'insert into history_flag (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '    `flag`, `date_effect`, `source`) values' \
+                          '   (%s, "%s", %s, "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['flag'],
+                           i['date_effect'], i['source'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # conn.commit()
+                # Insert history class
+                for i in self.history_class:
+                    sql = 'insert into history_class (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`class_society`, `date_survey`, `source`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['class_society'],
+                           i['date_survey'], i['source'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert history company
+                for i in self.history_company:
+                    sql = 'insert into history_company (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`company`, `role`, `date_effect`, `source`) values' \
+                          '(%s, "%s", %s, "%s", "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['company'],
+                          i['role'], i['date_effect'], i['source'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert company overview
+                for i in self.company_overview:
+                    sql = 'insert into company_overview (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '        `imo_company`, `overview`, `value`) values' \
+                          '       (%s, "%s", %s, "%s", %s, "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
+                           i['overview'], i['value'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert document compliance record
+                for i in self.doc_compliance:
+                    sql = 'insert into doc_compliance (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '      `imo_company`, `flag`, `ship_type`,`class_society`,' \
+                          '      `status`, `date_of_status`, `reason`) values' \
+                          '     (%s, "%s", %s, "%s", %s, "%s", "%s", "%s", "%s",' \
+                          '     "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
+                           i['flag'], i['ship_type'], i['class_society'], i['status'], i['date_of_status'],
+                           i['reason'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert synthesis inspection
+                for i in self.synthesis_inspection:
+                    sql = 'insert into synthesis_inspection (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '            `imo_company`, `role`, `nb_ships`,`last_3y_this_company_insp`,' \
+                          '            `last_3y_this_company_dete`, `last_3y_all_company_insp`,' \
+                          '            `last_3y_all_company_dete`) values' \
+                          '           (%s, "%s", %s, "%s", %s, "%s", "%s", "%s", "%s",' \
+                          '           "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
+                           i['role'], i['nb_ships'], i['last_3y_this_company_insp'], i['last_3y_this_company_dete'],
+                           i['last_3y_all_company_insp'], i['last_3y_all_company_dete'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert fleet
+                for i in self.fleet:
+                    sql = 'insert into fleet (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          ' `imo_company`, `ship_imo_and_name`, `tonnage`,`ship_type`,' \
+                          ' `year_build`, `current_flag`, `current_class`, `detentions_3yr_this_comp`,' \
+                          ' `detentions_3yr_all_comp`, `acting_as`) values' \
+                          '(%s, "%s", %s, "%s", %s, "%s", %s, "%s", "%s",' \
+                          '"%s", "%s", "%s", "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
+                          i['imo_ship_name'], i['tonnage'], i['ship_type'], i['year_build'], i['current_flag'],
+                          i['current_class'], i['detentions_3yr_this_comp'], i['detentions_3yr_all_comp'],
+                          i['acting_as'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # Insert class key
+                for i in self.class_key:
+                    sql = 'insert into class_key (`imo_number`, `name`, `mmsi`, `call_sign`,' \
+                          '`imo_company`, `abbr`, `name_of_society`) values' \
+                          '(%s, "%s", %s, "%s", %s, "%s", "%s");\r\n' % \
+                          (self.imo_number, self.name, self.mmsi, self.call_sign, i['imo_company'],
+                           i['abbr'], i['name_of_society'])
+                    fp.write(sql)
+                #   cursor.execute(sql)
+                # conn.commit()
+                try:
+                    # Insert company info
+                    for i in self.company_info:
+                        sql = 'insert into company_info(`imo_company`, `name`, `address`, `last_update`) ' \
+                              'values(%s, "%s", "%s", "%s");\r\n' % (i['imo_company'], i['name'], i['address'], \
+                               i['last_update'])
+                        log('Company IMO: ' + i['imo_company'])
+                        fp.write(sql)
+                #       cursor.execute(sql)
+                    # conn.commit()
+                except sqlite3.IntegrityError, e:
+                    log(e.message)
+
+                log('#%s Ship successfully written into DB - %d.' % (self.imo_number, cursor.rowcount))
         except Exception, ex:
             log('DB EXCEPTION: %s' % ex.message)
             if re.search('locked', ex.message):
