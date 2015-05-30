@@ -237,6 +237,7 @@ class Ship():
         clear_list(self.synthesis_inspection)
         clear_list(self.fleet)
         clear_list(self.class_key)
+        clear_list(self.company_info)
 
     def Commit(self, pid=str(time.time)):
         global cursor, conn
